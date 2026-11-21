@@ -21,7 +21,6 @@ u need to have smth like that :
 │       kdmapper_Release.exe
 │       zhang-wei.sys
 │
-│
 ├───models
 │       Apex5k.200.onnx
 │       Apex_100k_v1.onnx
