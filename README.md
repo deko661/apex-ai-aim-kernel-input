@@ -3,7 +3,7 @@ basic ai aim assist with kernel input, u can put any model u want :DD
 
 da mapper + driver is here: https://pixeldrain.com/u/dBM1FPpG                                                           and da ai models are here: https://pixeldrain.com/u/sv66zdTM
 
-how to use juste map da driver and run de aim.py, da pannel will appear automatically
+how to use: just map da driver and run de aim.py, da pannel will appear automatically
 
 u need to have smth like that :
 ```text
