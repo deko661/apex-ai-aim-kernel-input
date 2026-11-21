@@ -1,8 +1,7 @@
 # apex-ai-aim-kernel-input
 basic ai aim assist with kernel input, u can put any model u want :DD
-so da mapper + driver is here: https://pixeldrain.com/u/dBM1FPpG
 
-and da ai models are here: https://pixeldrain.com/u/sv66zdTM
+da mapper + driver is here: https://pixeldrain.com/u/dBM1FPpG                                                           and da ai models are here: https://pixeldrain.com/u/sv66zdTM
 
 u need to have smth like that :
 ```text
