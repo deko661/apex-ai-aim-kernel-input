@@ -133,6 +133,66 @@ def save_cfg():
     try: open("config.json","w").write(_js.dumps(CFG))
     except Exception: pass
 import atexit; atexit.register(save_cfg)
+
+# --- HTTP server for panel ---
+import http.server, socketserver, threading as _http_th, webbrowser as _wb, os as _os
+PANEL_PORT = 17521
+class PanelHandler(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, format, *args): pass
+    def do_GET(self):
+        if self.path == '/api/config':
+            self._send_json(CFG)
+        elif self.path == '/api/models':
+            self._send_json(list_models())
+        elif self.path == '/api/stats':
+            self._send_json(STATS)
+        elif self.path == '/' or self.path == '/index.html':
+            self.path = '/panel.html'
+            return http.server.SimpleHTTPRequestHandler.do_GET(self)
+        else:
+            return http.server.SimpleHTTPRequestHandler.do_GET(self)
+    def do_POST(self):
+        if self.path == '/api/config':
+            length = int(self.headers.get('Content-Length', 0))
+            data = self.rfile.read(length)
+            try:
+                updates = _js.loads(data)
+                for k, v in updates.items():
+                    if k in CFG:
+                        CFG[k] = v
+                        if k == 'running':
+                            print(f"[panel] running={v}")
+                save_cfg()
+                self._send_json({"ok": True})
+            except Exception as e:
+                self._send_json({"ok": False, "err": str(e)})
+        else:
+            self._send_json({"ok": False, "err": "unknown endpoint"})
+    def _send_json(self, obj):
+        import json as _j
+        data = _j.dumps(obj).encode()
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', len(data))
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(data)
+
+def _start_panel_server():
+    try:
+        _os.chdir(_os.path.dirname(_os.path.abspath(__file__)))
+        handler = PanelHandler
+        httpd = socketserver.TCPServer(("127.0.0.1", PANEL_PORT), handler)
+        t = _http_th.Thread(target=httpd.serve_forever, daemon=True)
+        t.start()
+        print(f"[panel] serving on http://127.0.0.1:{PANEL_PORT}")
+        threading.Timer(1.0, lambda: _wb.open(f"http://127.0.0.1:{PANEL_PORT}")).start()
+        return httpd
+    except Exception as e:
+        print(f"[!] panel server failed: {e}")
+        return None
+_panel_srv = _start_panel_server()
+
 CW, CH = 240, 240
 CONF = 0.55
 def CFG_FOV(): return int(CFG["fov"])
@@ -253,28 +313,41 @@ while not (win32api.GetAsyncKeyState(0x7B) & 0x8000):
     elif _k == "x2": aim_held = bool(win32api.GetAsyncKeyState(0x06)&0x8000)
     else: aim_held = bool(win32api.GetAsyncKeyState(0x05)&0x8000 or win32api.GetAsyncKeyState(0x06)&0x8000 or win32api.GetAsyncKeyState(0x02)&0x8000)
     STATS.update({"fps":f"{fps:.1f}","boxes":str(n),"weapon":f"{_wp.current} {getattr(_wp,'score',0):.2f}"})
-    # lock: keep same target if close, else closest to center
+    # Target selection: strict lock on first target found, only switch when it's gone
     if n > 0:
         cands = []
         for x0, y0, x1, y1, c in dets:
             if y0 > 550 or (x1-x0) < 20 or (y1-y0) < 20:
                 continue
             hx, hy = (x0+x1)/2, y0+(y1-y0)*BONE
-            cands.append((hx, hy))
+            d_center = ((hx-CX)**2 + (hy-CY)**2) ** 0.5
+            if d_center <= FOV:
+                cands.append((d_center, hx, hy))
         if not cands:
             locked, best = None, None
-        if locked is not None:
-            best_c, bd = None, 80
-            for hx, hy in cands:
-                d = ((hx-locked[0])**2 + (hy-locked[1])**2) ** 0.5
-                if d < bd:
-                    bd, best_c = d, (hx, hy)
-            if best_c is None:
-                locked = None
-                hist = []
+            hist = []
+        else:
+            if locked is not None:
+                # STRICT LOCK: keep current target if still in FOV (within 15px tolerance)
+                found = False
+                for d, hx, hy in cands:
+                    if ((hx-locked[0])**2 + (hy-locked[1])**2) ** 0.5 < 15:
+                        best = (hx, hy)
+                        found = True
+                        break
+                if not found:
+                    # Target lost, pick new closest to center
+                    cands.sort(key=lambda c: c[0])
+                    best = (cands[0][1], cands[0][2])
+                    locked = best
+                    hist = []
             else:
-                locked = best_c
-                best, bd = best_c, 0
+                # No locked target, pick closest to center
+                cands.sort(key=lambda c: c[0])
+                best = (cands[0][1], cands[0][2])
+                locked = best
+            # Prediction using history
+            if best:
                 now = time.time()
                 hist.append((now, best[0], best[1]))
                 hist = hist[-4:]
@@ -286,16 +359,10 @@ while not (win32api.GetAsyncKeyState(0x7B) & 0x8000):
                     vx = max(-800, min(800, vx))
                     vy = max(-800, min(800, vy))
                     best = (best[0] + vx * (PRED_MS/1000), best[1] + vy * (PRED_MS/1000))
-        if locked is None:
-            best, bd = None, 1e9
-            for hx, hy in cands:
-                d = ((hx-CX)**2 + (hy-CY)**2) ** 0.5
-                if d < FOV and d < bd:
-                    bd, best = d, (hx, hy)
-            locked = best
     else:
         locked = None
         best = None
+        hist = []
     if aim_held and best:
         if ema is None:
             ema = best
