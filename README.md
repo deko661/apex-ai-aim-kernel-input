@@ -5,7 +5,7 @@ da mapper + driver is here: https://pixeldrain.com/u/dBM1FPpG                   
 
 how to use: first run 
 ```powershell
-pip install -r "C:\Users\User\Desktop\driver test\github\requirements.txt"
+pip install -r "requirements.txt"
 ```
 after this just map da driver and run de aim.py, da pannel will appear automatically
 
